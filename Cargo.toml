@@ -2,8 +2,13 @@
 name = "harbinger"
 version = "0.1.0"
 edition = "2021"
+default-run = "harbinger"
 
 [dependencies]
 tokio = { version = "1.41.1", features = ["full"] }
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+
+[dev-dependencies]
+cargo-make = "0.37.23"
+
