@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod tcp_flags;
 
 use std::collections::HashMap;
