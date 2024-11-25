@@ -1,7 +1,24 @@
+pub mod tcp_flags;
+
 use std::io;
+use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tracing::{error, info};
+
+async fn new_conn_info(socket: &TcpStream, addr: &SocketAddr) -> io::Result<()> {
+    let peer_addr = socket.peer_addr()?;
+    let local_addr = socket.local_addr()?;
+
+    info!(
+        "New Connection: {} \nTCP Headers:\n\tSource Port: {} \n\tDestination Port: {}",
+        addr,
+        peer_addr.port(),
+        local_addr.port(),
+    );
+
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -12,16 +29,7 @@ async fn main() -> io::Result<()> {
 
     loop {
         let (mut socket, addr) = listener.accept().await?;
-
-        let peer_addr = socket.peer_addr()?;
-        let local_addr = socket.local_addr()?;
-
-        info!(
-            "New Connection: {} \nTCP Headers:\n\tSource Port: {} \n\tDestination Port: {}",
-            addr,
-            peer_addr.port(),
-            local_addr.port(),
-        );
+        new_conn_info(&socket, &addr).await?;
 
         tokio::spawn(async move {
             let mut buffer = [0; 1024];
