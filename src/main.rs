@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+// #![allow(dead_code)]
 pub mod tcp_flags;
 
 use std::collections::HashMap;
@@ -15,6 +15,7 @@ enum ConnectionState {
     SynReceived,
     SynAckSent,
     Established,
+    #[allow(dead_code)]
     Closed,
 }
 
@@ -36,23 +37,26 @@ async fn simulate_handshake(
 
     // Transition: LISTEN → SYN_RECEIVED
     states.insert(*addr, ConnectionState::SynReceived);
-    println!(
-        "State Transition: LISTEN → SYN_RECEIVED with flag: SYN for {}",
-        addr
+    info!(
+        "State Transition: LISTEN → SYN_RECEIVED with flag: {} for {}",
+        addr,
+        get_flag_for_state(&ConnectionState::SynReceived),
     );
 
     // Transition: SYN_RECEIVED → SYN_ACK_SENT
     states.insert(*addr, ConnectionState::SynAckSent);
-    println!(
-        "State Transition: SYN_RECEIVED → SYN_ACK_SENT with flag: SYN-ACK for {}",
-        addr
+    info!(
+        "State Transition: SYN_RECEIVED → SYN_ACK_SENT with flag: {} for {}",
+        addr,
+        get_flag_for_state(&ConnectionState::SynAckSent),
     );
 
     // Transition: SYN_ACK_SENT → ESTABLISHED
     states.insert(*addr, ConnectionState::Established);
-    println!(
-        "State Transition: SYN_ACK_SENT → ESTABLISHED with flag: ACK for {}",
-        addr
+    info!(
+        "State Transition: SYN_ACK_SENT → ESTABLISHED with flag: {} for {}",
+        addr,
+        get_flag_for_state(&ConnectionState::Established),
     );
 }
 
@@ -69,7 +73,7 @@ async fn new_conn_info(
 
     // Initial state: LISTEN
     states.insert(*addr, ConnectionState::Listen);
-    println!(
+    info!(
         "State Transition: LISTEN for connection from {}:{} to {}:{}",
         peer_addr.ip(),
         peer_addr.port(),
@@ -79,13 +83,24 @@ async fn new_conn_info(
 
     // Simulate state transitions
     states.insert(*addr, ConnectionState::SynReceived);
-    println!("State Transition: LISTEN → SYN_RECEIVED for {}", addr);
+    info!("State Transition: LISTEN → SYN_RECEIVED for {}", addr);
 
     states.insert(*addr, ConnectionState::Established);
-    println!("State Transition: SYN_RECEIVED → ESTABLISHED for {}", addr);
+    info!("State Transition: SYN_RECEIVED → ESTABLISHED for {}", addr);
 
     // Debug log current states
-    println!("Current States: {:?}", states);
+    info!("Current States: {:?}", states);
+
+    Ok(())
+}
+
+pub(crate) fn close_connection(
+    addr: &SocketAddr,
+    connection_states: Arc<Mutex<HashMap<SocketAddr, ConnectionState>>>,
+) -> io::Result<()> {
+    let mut states = connection_states.lock().unwrap();
+    states.remove_entry(addr);
+    info!("State Transition: CLOSED {}", addr);
 
     Ok(())
 }
@@ -105,7 +120,9 @@ async fn main() -> io::Result<()> {
         let connection_states = Arc::clone(&connection_states);
 
         // Simulate handshake and log state transitions
-        simulate_handshake(&addr, connection_states).await;
+        simulate_handshake(&addr, Arc::clone(&connection_states)).await;
+
+        new_conn_info(&socket, &addr, connection_states.clone()).await?;
 
         // Spawn a new task to handle the connection
         tokio::spawn(async move {
@@ -114,6 +131,9 @@ async fn main() -> io::Result<()> {
                 let n = match socket.read(&mut buffer).await {
                     Ok(0) => {
                         info!("Connection closed: {}", addr);
+                        if let Err(e) = close_connection(&addr, connection_states) {
+                            error!("Error during closing connection: {}", e);
+                        };
                         break;
                     }
                     Ok(n) => {
