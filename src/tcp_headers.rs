@@ -7,6 +7,8 @@ struct TcpHeader {
     seq_num: u32,
     ack_num: u32,
     flags: u8,
+    window_size: u16,
+    check_sum: u16,
 }
 
 impl TcpHeader {
@@ -22,6 +24,8 @@ impl TcpHeader {
             seq_num: u32::from_be_bytes(bytes[4..8].try_into().unwrap()),
             ack_num: u32::from_be_bytes(bytes[8..12].try_into().unwrap()),
             flags: bytes[13],
+            window_size: u16::from_be_bytes(bytes[14..16].try_into().unwrap()),
+            check_sum: u16::from_be_bytes(bytes[16..18].try_into().unwrap()),
         })
     }
 }
@@ -51,5 +55,7 @@ mod tests {
         assert_eq!(headers.seq_num, 305419896);
         assert_eq!(headers.ack_num, 2271560481);
         assert_eq!(headers.flags, 0x18); // SYN + ACK
+        assert_eq!(headers.window_size, 255);
+        assert_eq!(headers.check_sum, 61453);
     }
 }
