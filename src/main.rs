@@ -1,4 +1,5 @@
 pub mod tcp_flags;
+pub mod tcp_headers;
 
 use std::io;
 use std::net::SocketAddr;
