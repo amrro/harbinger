@@ -12,7 +12,16 @@ async fn main() -> io::Result<()> {
 
     loop {
         let (mut socket, addr) = listener.accept().await?;
-        info!("New Connection: {}", addr);
+
+        let peer_addr = socket.peer_addr()?;
+        let local_addr = socket.local_addr()?;
+
+        info!(
+            "New Connection: {} \nTCP Headers:\n\tSource Port: {} \n\tDestination Port: {}",
+            addr,
+            peer_addr.port(),
+            local_addr.port(),
+        );
 
         tokio::spawn(async move {
             let mut buffer = [0; 1024];
