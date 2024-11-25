@@ -12,8 +12,47 @@ use tracing::{error, info};
 enum ConnectionState {
     Listen,
     SynReceived,
+    SynAckSent,
     Established,
     Closed,
+}
+
+fn get_flag_for_state(state: &ConnectionState) -> &'static str {
+    match state {
+        ConnectionState::Listen => "LISTEN",
+        ConnectionState::SynReceived => "SYN",
+        ConnectionState::SynAckSent => "SYN-ACK",
+        ConnectionState::Established => "ACK",
+        ConnectionState::Closed => "CLOSED",
+    }
+}
+
+async fn simulate_handshake(
+    addr: &SocketAddr,
+    connection_states: Arc<Mutex<HashMap<SocketAddr, ConnectionState>>>,
+) {
+    let mut states = connection_states.lock().unwrap();
+
+    // Transition: LISTEN → SYN_RECEIVED
+    states.insert(*addr, ConnectionState::SynReceived);
+    println!(
+        "State Transition: LISTEN → SYN_RECEIVED with flag: SYN for {}",
+        addr
+    );
+
+    // Transition: SYN_RECEIVED → SYN_ACK_SENT
+    states.insert(*addr, ConnectionState::SynAckSent);
+    println!(
+        "State Transition: SYN_RECEIVED → SYN_ACK_SENT with flag: SYN-ACK for {}",
+        addr
+    );
+
+    // Transition: SYN_ACK_SENT → ESTABLISHED
+    states.insert(*addr, ConnectionState::Established);
+    println!(
+        "State Transition: SYN_ACK_SENT → ESTABLISHED with flag: ACK for {}",
+        addr
+    );
 }
 
 async fn new_conn_info(
@@ -62,20 +101,22 @@ async fn main() -> io::Result<()> {
 
     loop {
         let (mut socket, addr) = listener.accept().await?;
+        let connection_states = Arc::clone(&connection_states);
 
         // Simulate handshake and log state transitions
-        new_conn_info(&socket, &addr, connection_states.clone()).await?;
+        simulate_handshake(&addr, connection_states).await;
 
+        // Spawn a new task to handle the connection
         tokio::spawn(async move {
             let mut buffer = [0; 1024];
             loop {
                 let n = match socket.read(&mut buffer).await {
                     Ok(0) => {
-                        info!("Connectino closed: {}", addr);
+                        info!("Connection closed: {}", addr);
                         break;
                     }
                     Ok(n) => {
-                        info!(addr = %addr, length = n, "Date received from the client");
+                        info!(addr = %addr, length = n, "Data received from the client");
                         n
                     }
                     Err(e) => {
@@ -85,7 +126,7 @@ async fn main() -> io::Result<()> {
                 };
 
                 if let Err(e) = socket.write_all(&buffer[0..n]).await {
-                    error!("Erorr writing to the socket: {}", e);
+                    error!("Error writing to the socket: {}", e);
                     break;
                 }
             }
