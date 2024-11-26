@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use std::net::Ipv4Addr;
+
 #[derive(Debug)]
 struct TcpHeader {
     source_port: u16,
@@ -8,6 +10,10 @@ struct TcpHeader {
     ack_num: u32,
     flags: u8,
     window_size: u16,
+    /// The checksum field is the 16-bit ones' complement of the ones'
+    /// complement sum of all 16-bit words in the header and text.
+    /// TODO: checksum is not used explicitly, but it calculted when needed:
+    ///         Do we need to store it or calculate it on the fly?
     checksum: u16,
 }
 
@@ -29,7 +35,7 @@ impl TcpHeader {
         })
     }
 
-    fn to_be_bytes(&self) -> [u8; 20] {
+    fn to_bytes(&self) -> [u8; 20] {
         let mut bytes = [0u8; 20];
         bytes[0..2].copy_from_slice(&self.source_port.to_be_bytes());
         bytes[2..4].copy_from_slice(&self.dest_port.to_be_bytes());
@@ -44,14 +50,87 @@ impl TcpHeader {
         bytes
     }
 
+    fn to_be_bytes(&self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: &[u8]) -> [u8; 20] {
+        let checksum = self.calculate_checksum(src_ip, dst_ip, payload);
+        let mut raw_bytes = self.to_bytes();
+        raw_bytes[16..18].copy_from_slice(&checksum.to_be_bytes());
+        raw_bytes
+    }
+
     fn build_packet(&self, payload: &[u8]) -> Vec<u8> {
         let mut packet = Vec::new();
 
-        packet.extend_from_slice(&self.to_be_bytes());
+        packet.extend_from_slice(&self.to_bytes());
 
         packet.extend_from_slice(payload);
 
         packet
+    }
+
+    /// Returns: 16-bit ones' complement of the ones' complement sum of all
+    /// 16-bit words in the header and text.
+    ///
+    /// The checksum computation needs to ensure the 16-bit alignment of the
+    /// data being summed. If a segment contains an odd number of header and
+    /// text octets, alignment can be achieved by padding the last octet with
+    /// zeros on its right to form a 16-bit word for checksum purposes.
+    ///
+    /// The checksum also covers a pseudo-header conceptually prefixed to the
+    /// TCP header. The pseudo-header is 96 bits for IPv4 (12 bytes, 4 per row).
+    ///
+    ///   +--------+--------+--------+--------+
+    ///   |           Source Address          |
+    ///   +--------+--------+--------+--------+
+    ///   |         Destination Address       |
+    ///   +--------+--------+--------+--------+
+    ///   |  zero  |PTCL (6)|    TCP Length   |
+    ///   +--------+--------+--------+--------+
+    fn calculate_checksum(&self, src_ip: Ipv4Addr, dst_ip: Ipv4Addr, payload: &[u8]) -> u16 {
+        // The checksum itself is, according to the spec, is 16-bit long.
+        // we use only the first two bytes of the u32 to do all summations.
+        let mut sum = 0u32;
+
+        // Pseudo-header: src IP (4 bytes)
+        sum += u16::from_be_bytes(src_ip.octets()[0..2].try_into().unwrap()) as u32;
+        sum += u16::from_be_bytes(src_ip.octets()[2..4].try_into().unwrap()) as u32;
+
+        // Pseudo-header: dst IP (4 bytes)
+        sum += u16::from_be_bytes(dst_ip.octets()[0..2].try_into().unwrap()) as u32;
+        sum += u16::from_be_bytes(dst_ip.octets()[2..4].try_into().unwrap()) as u32;
+
+        // Pseudo-header: Reserved (0), Protocol number: (6), TCP Length
+        sum += 0x06_u32; // Protocol = 6 for TCP
+        let tcp_length = (self.to_bytes().len() + payload.len()) as u16;
+        sum += tcp_length as u32;
+
+        // TCP headers
+        for chunk in self.to_bytes().chunks(2) {
+            sum += u16::from_be_bytes(chunk.try_into().unwrap()) as u32;
+        }
+
+        // Payload
+        for chunk in payload.chunks(2) {
+            if chunk.len() == 2 {
+                sum += u16::from_be_bytes(chunk.try_into().unwrap()) as u32;
+            } else {
+                sum += (chunk[0] as u16) as u32;
+            }
+        }
+
+        // Fold 32-bit sum into 16-bit.
+        //
+        // If the addition of the high and low 16 bits produces any carry-out,
+        // (i.e. the new sum exceeds 16 bits) the process is repetead till no
+        // carry-out.
+        // perseving the mathematical correctness of one's complement by
+        // adding any carry-out back the the lower 16 bits.
+        while (sum >> 16) > 0 {
+            // `sum && 0xFFF` extract the low 16 bits of sum.
+            // `sum >> 16` extracts the high 16 bits of sum,
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+
+        !(sum as u16)
     }
 }
 
@@ -59,6 +138,16 @@ impl TcpHeader {
 mod tests {
 
     use super::*;
+
+    const TEST_HEADERS: TcpHeader = TcpHeader {
+        source_port: 49320,
+        dest_port: 8080,
+        seq_num: 305419896,
+        ack_num: 2271560481,
+        flags: 0x18, // SYN + ACK
+        window_size: 255,
+        checksum: 61453, // 0xF00D
+    };
 
     #[test]
     fn test_tcp_headers_from_bytes() {
@@ -87,16 +176,7 @@ mod tests {
 
     #[test]
     fn test_tcp_headers_to_bytes() {
-        let header = TcpHeader {
-            source_port: 49320,
-            dest_port: 8080,
-            seq_num: 305419896,
-            ack_num: 2271560481,
-            flags: 0x18, // SYN + ACK
-            window_size: 255,
-            checksum: 61453, // 0xF00D
-        };
-        let raw_bytes = header.to_be_bytes();
+        let raw_bytes = TEST_HEADERS.to_bytes();
 
         assert_eq!(
             raw_bytes,
@@ -116,20 +196,20 @@ mod tests {
 
     #[test]
     fn test_headers_build_packet_payload() {
-        let header = TcpHeader {
-            source_port: 49320,
-            dest_port: 8080,
-            seq_num: 305419896,
-            ack_num: 2271560481,
-            flags: 0x18, // SYN + ACK
-            window_size: 255,
-            checksum: 61453, // 0xF00D
-        };
-        // let payload = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
-        let payload = b"Hello, TCP!";
-        let packet = header.build_packet(payload);
+        let payload = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
+        let packet = TEST_HEADERS.build_packet(payload);
 
         assert_eq!(&packet[20..], payload); // Ensure payload is added
         assert_eq!(packet.len(), 20 + payload.len()); // Total packet size
+    }
+
+    #[test]
+    fn test_tcp_checksum_calculation() {
+        let src_ip = Ipv4Addr::new(192, 168, 1, 1);
+        let dst_ip = Ipv4Addr::new(192, 168, 1, 2);
+        let payload = b"Hello, TCP!";
+
+        let checksum = TEST_HEADERS.calculate_checksum(src_ip, dst_ip, payload);
+        assert_ne!(checksum, 0); // Ensure checksum is non-zero
     }
 }
