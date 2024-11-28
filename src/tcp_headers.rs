@@ -3,22 +3,22 @@
 use std::net::Ipv4Addr;
 
 #[derive(Debug)]
-struct TcpHeader {
-    source_port: u16,
-    dest_port: u16,
-    seq_num: u32,
-    ack_num: u32,
-    flags: u8,
-    window_size: u16,
+pub struct TcpHeader {
+    pub source_port: u16,
+    pub dest_port: u16,
+    pub seq_num: u32,
+    pub ack_num: u32,
+    pub flags: u8,
+    pub window_size: u16,
     /// The checksum field is the 16-bit ones' complement of the ones'
     /// complement sum of all 16-bit words in the header and text.
     /// TODO: checksum is not used explicitly, but it calculted when needed:
     ///         Do we need to store it or calculate it on the fly?
-    checksum: u16,
+    pub checksum: u16,
 }
 
 impl TcpHeader {
-    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < 20 {
             // TCP header is at least 20 bytes.
             return None;
@@ -57,8 +57,9 @@ impl TcpHeader {
         raw_bytes
     }
 
-    fn build_packet(&self, payload: &[u8]) -> Vec<u8> {
+    pub fn build_packet(&self, payload: &[u8]) -> Vec<u8> {
         let mut packet = Vec::new();
+        // TODO: Calculate checksum.
 
         packet.extend_from_slice(&self.to_bytes());
 
