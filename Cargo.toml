@@ -2,13 +2,9 @@
 name = "harbinger"
 version = "0.1.0"
 edition = "2021"
-default-run = "harbinger"
 
 [dependencies]
-tokio = { version = "1.41.1", features = ["full"] }
-tracing = "0.1.40"
-tracing-subscriber = "0.3.18"
-socket2 = "0.5.7"
+socket2 = { version = "0.5.7", features = ["all"] }
 bitflags = "2.6.0"
 
 [dev-dependencies]

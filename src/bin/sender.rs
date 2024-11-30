@@ -3,8 +3,6 @@ use socket2::{Domain, SockAddr, Socket, Type};
 use std::net::Ipv4Addr;
 
 fn main() {
-    // Create a raw socket of IPV4 (no specific protocl, using custom!).
-    // TODO: (later) try `Protocl::TCP`.
     let sender =
         Socket::new(Domain::IPV4, Type::RAW, None).expect("Failed to create sender socket");
     let src_ip = Ipv4Addr::new(127, 0, 0, 1);
