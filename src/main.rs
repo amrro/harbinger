@@ -1,6 +1,4 @@
-// #![allow(dead_code)]
-pub mod tcp_flags;
-pub mod tcp_headers;
+#![allow(dead_code)]
 
 use std::collections::HashMap;
 use std::io;
