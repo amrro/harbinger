@@ -1,11 +1,11 @@
 use core::panic;
+use harbinger::tcp::Tcp;
+use socket2::{Domain, SockAddr, Socket, Type};
 use std::{
     io::{self},
     mem::MaybeUninit,
     net::Ipv4Addr,
 };
-
-use socket2::{Domain, SockAddr, Socket, Type};
 
 fn main() -> io::Result<()> {
     let receiver = Socket::new(Domain::IPV4, Type::RAW, None)
@@ -25,10 +25,19 @@ fn main() -> io::Result<()> {
 
     let recieved_data =
         unsafe { std::slice::from_raw_parts(buffer.as_ptr() as *const u8, bytes_read) };
+
+    let ip_header_len = ((recieved_data[0] & 0x0F) * 4) as usize;
+    let tcp_data = &recieved_data[ip_header_len..];
+
+    let (tcp, payload) = Tcp::parse_packet(tcp_data);
     println!(
-        "Recieved {} bytes from {:?}: {:?}",
-        bytes_read, sender_addr, recieved_data
+        "Recieved {} bytes from {:?}: {}",
+        bytes_read, sender_addr, tcp
     );
+
+    if let Some(pay) = payload {
+        println!("\n{}", pay);
+    }
 
     Ok(())
 }
