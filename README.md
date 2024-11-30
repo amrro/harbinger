@@ -1,29 +1,30 @@
+
 # Harbinger
 
-Harbinger is a hands-on learning project focused on building a customizable and
-educational TCP networking library in Rust. Starting with a simple async echo
-server powered by tokio, the project progressively replaces high-level
-abstractions with custom logic to explore TCP fundamentals—handshakes, headers,
-packet parsing, and more. Harbinger isn't about production-grade networking;
-it's about tinkering, breaking things, and understanding how they work from the
-ground up. Join the journey to decode TCP and build something truly unique!
+Harbinger is an educational Rust project for exploring TCP headers and raw socket programming. It allows users to:
+- Parse raw TCP packets and extract header details.
+- Build and send TCP packets using raw sockets.
+---
+## Features
+
+1. **TCP Header Parsing**:
+   - Extract fields like source port, destination port, sequence number, and flags.
+
+2. **TCP Packet Construction**:
+   - Build TCP packets with custom headers and payloads.
+
+3. **Raw Socket Communication**:
+   - Send and receive raw TCP packets for experimentation and learning.
+
 
 ## Run
-
-- install cargo-make:
-
+- run the receiver first, it requires root privileges:
 ```cli
-cargo install cargo-make
+sudo cargo run --bin receiver
 ```
-
-- run server first:
-
+- Then, run sender in order to send a TCP packet:
 ```cli
-cargo make server
+sudo cargo run --bin sender
 ```
-
-- run client:
-
-```cli
-cargo make client
-```
+## Future Improvements.
+- Add support for simulating TCP three-way handshakes.

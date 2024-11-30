@@ -7,6 +7,3 @@ edition = "2021"
 socket2 = { version = "0.5.7", features = ["all"] }
 bitflags = "2.6.0"
 
-[dev-dependencies]
-cargo-make = "0.37.23"
-

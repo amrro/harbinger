@@ -1,7 +1,0 @@
-[tasks.server]
-command = "cargo"
-args = ["run", "--bin", "harbinger"]
-
-[tasks.client]
-command = "cargo"
-args = ["run", "--bin", "client"]
